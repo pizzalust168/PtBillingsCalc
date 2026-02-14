@@ -26,7 +26,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { formatCurrency } from "@/lib/calculator";
 import type { WeeklyTotal, WeeklyLineItem } from "@shared/schema";
-import { Calendar, Clock, DollarSign, Eye, Trash2, FileText } from "lucide-react";
+import { Calendar, Clock, DollarSign, Eye, Trash2, FileText, Download } from "lucide-react";
 
 interface WeekDetail {
   week: WeeklyTotal;
@@ -65,6 +65,15 @@ export default function LogPage() {
       });
     },
   });
+
+  const downloadCsv = (url: string) => {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr + "T00:00:00");
@@ -119,6 +128,16 @@ export default function LogPage() {
             {weeks.length} {weeks.length === 1 ? "week" : "weeks"} recorded
           </p>
         </div>
+        {weeks.length > 0 && (
+          <Button
+            variant="outline"
+            onClick={() => downloadCsv("/api/weeks/export/all")}
+            data-testid="button-export-all"
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Export All CSV
+          </Button>
+        )}
       </div>
 
       {weeks.length === 0 ? (
@@ -166,6 +185,15 @@ export default function LogPage() {
                   </div>
 
                   <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => downloadCsv(`/api/weeks/${week.id}/csv`)}
+                      data-testid={`button-export-${week.id}`}
+                    >
+                      <Download className="mr-1.5 h-3.5 w-3.5" />
+                      Export
+                    </Button>
                     <Button
                       variant="outline"
                       size="sm"

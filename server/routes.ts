@@ -16,6 +16,46 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/weeks/export/all", async (_req, res) => {
+    try {
+      const weeks = await storage.getWeeks();
+
+      const rows: string[] = [];
+      rows.push("Week Ending,Item,Minutes per Item,Base Amount,BBI Amount,Count,Subtotal,Total Minutes,Total Hours,Prelim with BBI,Prelim without BBI,Loading (6.25%),Total Billings");
+
+      for (const week of weeks) {
+        const items = await storage.getLineItems(week.id);
+        for (const item of items) {
+          if (item.count > 0) {
+            const subtotal = item.count * (item.baseAmount + item.bbiAmount);
+            rows.push([
+              week.weekEnding,
+              `"${item.itemLabel}"`,
+              item.minutesPerItem,
+              item.baseAmount.toFixed(2),
+              item.bbiAmount.toFixed(2),
+              item.count,
+              subtotal.toFixed(2),
+              week.totalMinutes,
+              week.totalHours,
+              week.prelimWithBbi.toFixed(2),
+              week.prelimWithoutBbi.toFixed(2),
+              week.loading625.toFixed(2),
+              week.totalBillings.toFixed(2),
+            ].join(","));
+          }
+        }
+      }
+
+      const csv = rows.join("\n");
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", `attachment; filename="billings_all_weeks.csv"`);
+      res.send(csv);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to export data" });
+    }
+  });
+
   app.get("/api/weeks/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
@@ -32,6 +72,54 @@ export async function registerRoutes(
       res.json({ week, items });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch week details" });
+    }
+  });
+
+  app.get("/api/weeks/:id/csv", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid week ID" });
+      }
+
+      const week = await storage.getWeek(id);
+      if (!week) {
+        return res.status(404).json({ message: "Week not found" });
+      }
+
+      const items = await storage.getLineItems(id);
+
+      const rows: string[] = [];
+      rows.push("Week Ending,Item,Minutes per Item,Base Amount,BBI Amount,Count,Subtotal");
+      for (const item of items) {
+        if (item.count > 0) {
+          const subtotal = item.count * (item.baseAmount + item.bbiAmount);
+          rows.push([
+            week.weekEnding,
+            `"${item.itemLabel}"`,
+            item.minutesPerItem,
+            item.baseAmount.toFixed(2),
+            item.bbiAmount.toFixed(2),
+            item.count,
+            subtotal.toFixed(2),
+          ].join(","));
+        }
+      }
+      rows.push("");
+      rows.push(`Summary`);
+      rows.push(`Total Minutes,${week.totalMinutes}`);
+      rows.push(`Total Hours,${week.totalHours}`);
+      rows.push(`Prelim with BBI,${week.prelimWithBbi.toFixed(2)}`);
+      rows.push(`Prelim without BBI,${week.prelimWithoutBbi.toFixed(2)}`);
+      rows.push(`Loading (6.25%),${week.loading625.toFixed(2)}`);
+      rows.push(`Total Billings,${week.totalBillings.toFixed(2)}`);
+
+      const csv = rows.join("\n");
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", `attachment; filename="billings_${week.weekEnding}.csv"`);
+      res.send(csv);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to export week" });
     }
   });
 
