@@ -1,60 +1,60 @@
 import {
-  weeklyTotals,
-  weeklyLineItems,
-  type WeeklyTotal,
-  type InsertWeeklyTotal,
-  type WeeklyLineItem,
-  type InsertWeeklyLineItem,
+  dailyTotals,
+  dailyLineItems,
+  type DailyTotal,
+  type InsertDailyTotal,
+  type DailyLineItem,
+  type InsertDailyLineItem,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc } from "drizzle-orm";
 
 export interface IStorage {
-  getWeeks(): Promise<WeeklyTotal[]>;
-  getWeek(id: number): Promise<WeeklyTotal | undefined>;
-  getWeekByDate(weekEnding: string): Promise<WeeklyTotal | undefined>;
-  createWeek(week: InsertWeeklyTotal): Promise<WeeklyTotal>;
-  deleteWeek(id: number): Promise<boolean>;
-  createLineItems(items: InsertWeeklyLineItem[]): Promise<WeeklyLineItem[]>;
-  getLineItems(weeklyTotalId: number): Promise<WeeklyLineItem[]>;
+  getDays(): Promise<DailyTotal[]>;
+  getDay(id: number): Promise<DailyTotal | undefined>;
+  getDayByDate(date: string): Promise<DailyTotal | undefined>;
+  createDay(day: InsertDailyTotal): Promise<DailyTotal>;
+  deleteDay(id: number): Promise<boolean>;
+  createLineItems(items: InsertDailyLineItem[]): Promise<DailyLineItem[]>;
+  getLineItems(dailyTotalId: number): Promise<DailyLineItem[]>;
 }
 
 export class DatabaseStorage implements IStorage {
-  async getWeeks(): Promise<WeeklyTotal[]> {
-    return db.select().from(weeklyTotals).orderBy(desc(weeklyTotals.weekEnding));
+  async getDays(): Promise<DailyTotal[]> {
+    return db.select().from(dailyTotals).orderBy(desc(dailyTotals.date));
   }
 
-  async getWeek(id: number): Promise<WeeklyTotal | undefined> {
-    const [week] = await db.select().from(weeklyTotals).where(eq(weeklyTotals.id, id));
-    return week || undefined;
+  async getDay(id: number): Promise<DailyTotal | undefined> {
+    const [day] = await db.select().from(dailyTotals).where(eq(dailyTotals.id, id));
+    return day || undefined;
   }
 
-  async getWeekByDate(weekEnding: string): Promise<WeeklyTotal | undefined> {
-    const [week] = await db.select().from(weeklyTotals).where(eq(weeklyTotals.weekEnding, weekEnding));
-    return week || undefined;
+  async getDayByDate(date: string): Promise<DailyTotal | undefined> {
+    const [day] = await db.select().from(dailyTotals).where(eq(dailyTotals.date, date));
+    return day || undefined;
   }
 
-  async createWeek(week: InsertWeeklyTotal): Promise<WeeklyTotal> {
-    const [created] = await db.insert(weeklyTotals).values(week).returning();
+  async createDay(day: InsertDailyTotal): Promise<DailyTotal> {
+    const [created] = await db.insert(dailyTotals).values(day).returning();
     return created;
   }
 
-  async deleteWeek(id: number): Promise<boolean> {
-    const result = await db.delete(weeklyTotals).where(eq(weeklyTotals.id, id)).returning();
+  async deleteDay(id: number): Promise<boolean> {
+    const result = await db.delete(dailyTotals).where(eq(dailyTotals.id, id)).returning();
     return result.length > 0;
   }
 
-  async createLineItems(items: InsertWeeklyLineItem[]): Promise<WeeklyLineItem[]> {
+  async createLineItems(items: InsertDailyLineItem[]): Promise<DailyLineItem[]> {
     if (items.length === 0) return [];
-    return db.insert(weeklyLineItems).values(items).returning();
+    return db.insert(dailyLineItems).values(items).returning();
   }
 
-  async getLineItems(weeklyTotalId: number): Promise<WeeklyLineItem[]> {
+  async getLineItems(dailyTotalId: number): Promise<DailyLineItem[]> {
     return db
       .select()
-      .from(weeklyLineItems)
-      .where(eq(weeklyLineItems.weeklyTotalId, weeklyTotalId))
-      .orderBy(weeklyLineItems.itemLabel);
+      .from(dailyLineItems)
+      .where(eq(dailyLineItems.dailyTotalId, dailyTotalId))
+      .orderBy(dailyLineItems.itemLabel);
   }
 }
 

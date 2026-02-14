@@ -1,12 +1,12 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, integer, real, serial, timestamp, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, real, serial, unique } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const weeklyTotals = pgTable("weekly_totals", {
+export const dailyTotals = pgTable("daily_totals", {
   id: serial("id").primaryKey(),
-  weekEnding: text("week_ending").notNull().unique(),
+  date: text("date").notNull().unique(),
   totalBillings: real("total_billings").notNull(),
   prelimWithBbi: real("prelim_with_bbi").notNull(),
   prelimWithoutBbi: real("prelim_without_bbi").notNull(),
@@ -16,9 +16,9 @@ export const weeklyTotals = pgTable("weekly_totals", {
   createdAt: text("created_at").notNull(),
 });
 
-export const weeklyLineItems = pgTable("weekly_line_items", {
+export const dailyLineItems = pgTable("daily_line_items", {
   id: serial("id").primaryKey(),
-  weeklyTotalId: integer("weekly_total_id").notNull().references(() => weeklyTotals.id, { onDelete: "cascade" }),
+  dailyTotalId: integer("daily_total_id").notNull().references(() => dailyTotals.id, { onDelete: "cascade" }),
   itemKey: text("item_key").notNull(),
   itemLabel: text("item_label").notNull(),
   minutesPerItem: integer("minutes_per_item").notNull(),
@@ -26,39 +26,39 @@ export const weeklyLineItems = pgTable("weekly_line_items", {
   bbiAmount: real("bbi_amount").notNull(),
   count: integer("count").notNull(),
 }, (table) => [
-  unique().on(table.weeklyTotalId, table.itemKey),
+  unique().on(table.dailyTotalId, table.itemKey),
 ]);
 
-export const weeklyTotalsRelations = relations(weeklyTotals, ({ many }) => ({
-  lineItems: many(weeklyLineItems),
+export const dailyTotalsRelations = relations(dailyTotals, ({ many }) => ({
+  lineItems: many(dailyLineItems),
 }));
 
-export const weeklyLineItemsRelations = relations(weeklyLineItems, ({ one }) => ({
-  weeklyTotal: one(weeklyTotals, {
-    fields: [weeklyLineItems.weeklyTotalId],
-    references: [weeklyTotals.id],
+export const dailyLineItemsRelations = relations(dailyLineItems, ({ one }) => ({
+  dailyTotal: one(dailyTotals, {
+    fields: [dailyLineItems.dailyTotalId],
+    references: [dailyTotals.id],
   }),
 }));
 
-export const insertWeeklyTotalSchema = createInsertSchema(weeklyTotals).omit({
+export const insertDailyTotalSchema = createInsertSchema(dailyTotals).omit({
   id: true,
 });
 
-export const insertWeeklyLineItemSchema = createInsertSchema(weeklyLineItems).omit({
+export const insertDailyLineItemSchema = createInsertSchema(dailyLineItems).omit({
   id: true,
 });
 
-export type WeeklyTotal = typeof weeklyTotals.$inferSelect;
-export type InsertWeeklyTotal = z.infer<typeof insertWeeklyTotalSchema>;
-export type WeeklyLineItem = typeof weeklyLineItems.$inferSelect;
-export type InsertWeeklyLineItem = z.infer<typeof insertWeeklyLineItemSchema>;
+export type DailyTotal = typeof dailyTotals.$inferSelect;
+export type InsertDailyTotal = z.infer<typeof insertDailyTotalSchema>;
+export type DailyLineItem = typeof dailyLineItems.$inferSelect;
+export type InsertDailyLineItem = z.infer<typeof insertDailyLineItemSchema>;
 
-export const saveWeekSchema = z.object({
-  weekEnding: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD format"),
+export const saveDaySchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD format"),
   counts: z.record(z.string(), z.number().int().min(0)),
 });
 
-export type SaveWeekInput = z.infer<typeof saveWeekSchema>;
+export type SaveDayInput = z.infer<typeof saveDaySchema>;
 
 export interface LineItemDef {
   key: string;
@@ -113,4 +113,19 @@ export function computeTotals(counts: Record<string, number>) {
     loading625,
     totalBillings,
   };
+}
+
+export function getMonday(dateStr: string): string {
+  const d = new Date(dateStr + "T00:00:00");
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  const monday = new Date(d);
+  monday.setDate(d.getDate() + diff);
+  return monday.toISOString().split("T")[0];
+}
+
+export function getSunday(mondayStr: string): string {
+  const d = new Date(mondayStr + "T00:00:00");
+  d.setDate(d.getDate() + 6);
+  return d.toISOString().split("T")[0];
 }

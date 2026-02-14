@@ -2,11 +2,11 @@
 
 ## Overview
 
-A medical billings calculator web application that allows healthcare professionals to track weekly billing items with live totals, persistent logging, and detailed breakdowns. The app replicates Excel-based billing logic in a web interface, supporting line-item counts for various medical consultation types, automatic calculation of totals (including BBI amounts, loading, and total billings), and a persistent log of weekly entries.
+A medical billings calculator web application that allows healthcare professionals to track daily billing items with live totals, persistent logging, and detailed breakdowns. The app replicates Excel-based billing logic in a web interface, supporting line-item counts for various medical consultation types, automatic calculation of totals (including BBI amounts, loading, and total billings), and a persistent log of daily entries grouped by work week (Monday–Sunday).
 
 The app has two main pages:
-- **Calculator** (`/`) — Enter counts for billing line items, see live-calculated totals, and save weekly entries
-- **Billings Log** (`/log`) — View, inspect details, and delete saved weekly billing records
+- **Calculator** (`/`) — Enter counts for billing line items, see live-calculated totals, and save daily entries
+- **Billings Log** (`/log`) — View daily entries automatically grouped by work week (Mon–Sun), inspect day details, export CSV, and delete entries
 
 ## User Preferences
 
@@ -27,10 +27,12 @@ Preferred communication style: Simple, everyday language.
 - **Framework**: Express 5 (ESM modules) running on Node.js
 - **API Pattern**: RESTful JSON API under `/api/` prefix
 - **Key Endpoints**:
-  - `GET /api/weeks` — List all saved weeks
-  - `GET /api/weeks/:id` — Get week details with line items
-  - `POST /api/weeks` — Save a new week (validates with Zod, prevents duplicate week-ending dates)
-  - `DELETE /api/weeks/:id` — Delete a week and its line items
+  - `GET /api/days` — List all saved days
+  - `GET /api/days/:id` — Get day details with line items
+  - `GET /api/days/:id/csv` — Export single day as CSV
+  - `GET /api/days/export/all` — Export all days as CSV
+  - `POST /api/days` — Save a new day (validates with Zod, prevents duplicate dates)
+  - `DELETE /api/days/:id` — Delete a day and its line items
 - **Development**: Vite dev server middleware with HMR served through Express
 - **Production**: Static files served from `dist/public`, built via custom build script using esbuild (server) + Vite (client)
 
@@ -38,15 +40,17 @@ Preferred communication style: Simple, everyday language.
 - **Location**: `shared/schema.ts` — Contains database schema, types, validation schemas, line item definitions, and computation logic
 - **Validation**: Zod schemas (generated via drizzle-zod) for input validation on both client and server
 - **Business Logic**: `computeTotals` function and `LINE_ITEMS` array define billing calculation rules (total minutes, prelim with/without BBI, 6.25% loading, total billings)
+- **Work Week Logic**: `getMonday()` and `getSunday()` helper functions calculate work week boundaries (Mon–Sun) from any date
 
 ### Database
 - **ORM**: Drizzle ORM with PostgreSQL dialect
 - **Database**: PostgreSQL (connection via `DATABASE_URL` environment variable)
 - **Schema Push**: `npm run db:push` uses drizzle-kit to push schema changes
 - **Tables**:
-  - `weekly_totals` — Stores computed totals per week (week_ending is unique)
-  - `weekly_line_items` — Stores per-item counts for each week (foreign key to weekly_totals with cascade delete, unique on weeklyTotalId + itemKey)
-- **Relations**: One-to-many from weekly_totals to weekly_line_items
+  - `daily_totals` — Stores computed totals per day (date is unique)
+  - `daily_line_items` — Stores per-item counts for each day (foreign key to daily_totals with cascade delete, unique on dailyTotalId + itemKey)
+- **Relations**: One-to-many from daily_totals to daily_line_items
+- **Work Week Grouping**: Days are grouped into work weeks (Mon–Sun) on the frontend
 - **Session Storage**: connect-pg-simple available for session storage (dependency present)
 
 ### Storage Layer

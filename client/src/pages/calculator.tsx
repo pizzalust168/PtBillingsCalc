@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { LINE_ITEMS } from "@shared/schema";
 import { calculateTotals, formatCurrency, getLineItemCategories } from "@/lib/calculator";
-import { Calculator, RotateCcw, Save, Clock, DollarSign, FileText, TrendingUp, Minus, Plus } from "lucide-react";
+import { RotateCcw, Save, Clock, DollarSign, FileText, TrendingUp, Minus, Plus } from "lucide-react";
 
 export default function CalculatorPage() {
   const { toast } = useToast();
@@ -18,7 +18,9 @@ export default function CalculatorPage() {
     }
     return initial;
   });
-  const [weekEnding, setWeekEnding] = useState("");
+
+  const today = new Date().toISOString().split("T")[0];
+  const [date, setDate] = useState(today);
 
   const totals = useMemo(() => calculateTotals(counts), [counts]);
   const categories = useMemo(() => getLineItemCategories(), []);
@@ -41,24 +43,26 @@ export default function CalculatorPage() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/weeks", {
-        weekEnding,
+      const res = await apiRequest("POST", "/api/days", {
+        date,
         counts,
       });
       return res.json();
     },
     onSuccess: () => {
+      const d = new Date(date + "T00:00:00");
+      const formatted = d.toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
       toast({
-        title: "Week saved",
-        description: `Billings for week ending ${weekEnding} have been saved.`,
+        title: "Day saved",
+        description: `Billings for ${formatted} have been saved.`,
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/weeks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/days"] });
       clearCounts();
-      setWeekEnding("");
+      setDate(today);
     },
     onError: (error: Error) => {
       toast({
-        title: "Error saving week",
+        title: "Error saving day",
         description: error.message,
         variant: "destructive",
       });
@@ -66,10 +70,10 @@ export default function CalculatorPage() {
   });
 
   const handleSave = () => {
-    if (!weekEnding) {
+    if (!date) {
       toast({
         title: "Date required",
-        description: "Please select a week ending date before saving.",
+        description: "Please select a date before saving.",
         variant: "destructive",
       });
       return;
@@ -93,7 +97,7 @@ export default function CalculatorPage() {
             Billings Calculator
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Enter item counts to calculate weekly billings
+            Enter item counts to calculate daily billings
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -238,16 +242,16 @@ export default function CalculatorPage() {
         <CardContent className="p-4 md:p-6">
           <div className="flex flex-col md:flex-row items-start md:items-end gap-4">
             <div className="flex-1 w-full md:w-auto">
-              <label className="text-sm font-medium mb-1.5 block" htmlFor="week-ending">
-                Week Ending Date
+              <label className="text-sm font-medium mb-1.5 block" htmlFor="billing-date">
+                Date
               </label>
               <Input
-                id="week-ending"
+                id="billing-date"
                 type="date"
-                value={weekEnding}
-                onChange={(e) => setWeekEnding(e.target.value)}
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
                 className="w-full md:w-56"
-                data-testid="input-week-ending"
+                data-testid="input-date"
               />
             </div>
             <div className="flex items-center gap-3 flex-wrap">
@@ -258,10 +262,10 @@ export default function CalculatorPage() {
               <Button
                 onClick={handleSave}
                 disabled={saveMutation.isPending}
-                data-testid="button-save-week"
+                data-testid="button-save-day"
               >
                 <Save className="mr-2 h-4 w-4" />
-                {saveMutation.isPending ? "Saving..." : "Save Week"}
+                {saveMutation.isPending ? "Saving..." : "Save Day"}
               </Button>
             </div>
           </div>
