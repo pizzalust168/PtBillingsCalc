@@ -1,0 +1,304 @@
+"""
+Billings Calculator Web App (Flask + SQLite) — Single-file starter scaffold
+
+✅ Includes:
+- Milestone plan (1 & 2)
+- Stores weekly totals AND per-item counts (weekly_line_items) in Milestone 1
+- Two pages: /calculator and /log
+- Client-side live calculations (matches your Excel logic)
+- Save Week Ending -> writes totals + per-line counts to SQLite
+- Minimal, paste-and-run skeleton suitable for Replit
+
+================================================================================
+MILESTONE PLAN (for Replit)
+================================================================================
+
+Milestone 1 — “Parity with Excel + Persistent Log”
+Acceptance checklist:
+1) Calculator page
+   - [ ] Line items shown with editable COUNT fields
+   - [ ] Live totals update in-browser as counts change
+   - [ ] Totals match spreadsheet logic:
+        total_minutes = Σ(count*minutes)
+        prelim_with_bbi = Σ(count*(base+bbi))
+        prelim_without_bbi = Σ(count*base)
+        loading = 0.0625 * prelim_without_bbi
+        total_billings = prelim_with_bbi + loading
+   - [ ] Total hours shown as ceil(total_minutes/60)
+   - [ ] Clear counts resets inputs to 0
+2) Saving
+   - [ ] Week Ending date required
+   - [ ] Save persists:
+        - weekly_totals row (unique by week_ending)
+        - weekly_line_items rows for each item (counts)
+   - [ ] Duplicate week_ending handled with clear message
+3) Log page
+   - [ ] Lists saved weeks newest-first with totals + key summary fields
+   - [ ] “View details” shows per-item counts for that week (optional but included below)
+   - [ ] “Delete week” removes totals + line items (optional; included below)
+
+Milestone 2 — “Budgets + Insights”
+Additions:
+- [ ] Budgets: weekly/monthly target fields (e.g., budget_weekly, budget_monthly)
+- [ ] Charts: weekly trend, monthly totals, rolling average
+- [ ] Breakdowns: per-item contribution, $/hour, minutes distribution
+- [ ] Export CSV: totals + itemized counts
+- [ ] Optional: categories (Consults, After Hours, Reviews, Admin etc.)
+
+================================================================================
+RUN IN REPLIT
+================================================================================
+1) Create a new Replit -> Python
+2) Add dependencies:
+   - flask
+3) Set run command (if needed):
+   python app.py
+4) Open the webview
+
+================================================================================
+"""
+
+from __future__ import annotations
+
+import math
+import sqlite3
+from dataclasses import dataclass, asdict
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+from flask import Flask, request, redirect, url_for, jsonify, render_template_string
+
+APP_TITLE = "Billings Calculator"
+DB_PATH = Path("billings.sqlite3")
+
+app = Flask(__name__)
+app.secret_key = "replace-me-in-production"  # for flash/session if you later add it
+
+
+# =========================
+# DATA MODEL (seed items)
+# =========================
+
+@dataclass(frozen=True)
+class LineItem:
+    key: str
+    label: str
+    minutes: int
+    base_amount: float
+    bbi_amount: float
+
+    @property
+    def total_with_bbi(self) -> float:
+        return float(self.base_amount + self.bbi_amount)
+
+
+LINE_ITEMS: List[LineItem] = [
+    LineItem("facilities_visited", "Facilities Visited", 0, 64.15, 0.0),
+    LineItem("consult_a_90020", "Consult - A (90020)", 2, 20.05, 8.6),
+    LineItem("consult_b_90035", "Consult - B (90035)", 6, 43.9, 25.7),
+    LineItem("consult_c_90043", "Consult - C (90043)", 20, 84.9, 25.7),
+    LineItem("consult_d_90051", "Consult - D (90051)", 40, 125.1, 25.7),
+    LineItem("consult_e_90054", "Consult - E (90054)", 60, 202.65, 25.7),
+    LineItem("consult_a_ah_5010", "Consult - A AH (5010)", 2, 37.7, 8.6),
+    LineItem("consult_b_ah_5028", "Consult - B AH (5028)", 6, 61.05, 25.7),
+    LineItem("consult_c_5049", "Consult - C (5049)", 20, 101.9, 25.7),
+    LineItem("consult_d_5067", "Consult - D (5067)", 40, 141.3, 25.7),
+    LineItem("consult_e_5077", "Consult - E (5077)", 60, 237.3, 25.7),
+    LineItem("urgent_unsociable_599", "Urgent Unsociable (599)", 15, 178.5, 8.6),
+    LineItem("health_ax", "Health Ax", 60, 313.6, 8.6),
+    LineItem("rmmr_standalone", "RMMR - Standalone", 10, 123.7, 8.6),
+    LineItem("rmmr_cobilled", "RMMR - Co-billed", 10, 123.7, 8.6),
+    LineItem("mdcp_731_standalone", "MDCP (731) - Standalone", 10, 82.1, 8.6),
+    LineItem("mdcp_731_cobilled", "MDCP (731) - Co-billed", 10, 82.1, 8.6),
+    LineItem("mdt_739", "MDT (739)", 20, 141.05, 8.6),
+]
+
+
+# =========================
+# DB LAYER
+# =========================
+
+def get_conn() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    # Enforce FK constraints
+    conn.execute("PRAGMA foreign_keys = ON;")
+    return conn
+
+
+def init_db() -> None:
+    with get_conn() as conn:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS weekly_totals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                week_ending TEXT NOT NULL UNIQUE,                 -- 'YYYY-MM-DD'
+                total_billings REAL NOT NULL,
+                prelim_with_bbi REAL NOT NULL,
+                prelim_without_bbi REAL NOT NULL,
+                loading_625 REAL NOT NULL,
+                total_minutes INTEGER NOT NULL,
+                total_hours INTEGER NOT NULL,
+                created_at TEXT NOT NULL                          -- ISO datetime
+            );
+
+            CREATE TABLE IF NOT EXISTS weekly_line_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                weekly_total_id INTEGER NOT NULL,
+                item_key TEXT NOT NULL,
+                item_label TEXT NOT NULL,
+                minutes_per_item INTEGER NOT NULL,
+                base_amount REAL NOT NULL,
+                bbi_amount REAL NOT NULL,
+                count INTEGER NOT NULL,
+                FOREIGN KEY (weekly_total_id) REFERENCES weekly_totals(id) ON DELETE CASCADE,
+                UNIQUE(weekly_total_id, item_key)
+            );
+            """
+        )
+
+
+# =========================
+# BUSINESS LOGIC (server)
+# =========================
+
+def parse_counts(payload: dict) -> Dict[str, int]:
+    counts: Dict[str, int] = {}
+    raw_counts = payload.get("counts", {})
+    if not isinstance(raw_counts, dict):
+        return counts
+
+    for item in LINE_ITEMS:
+        val = raw_counts.get(item.key, 0)
+        try:
+            ival = int(val)
+        except (TypeError, ValueError):
+            ival = 0
+        if ival < 0:
+            ival = 0
+        counts[item.key] = ival
+    return counts
+
+
+def compute_totals(counts: Dict[str, int]) -> Dict[str, float | int]:
+    total_minutes = 0
+    prelim_with_bbi = 0.0
+    prelim_without_bbi = 0.0
+
+    for item in LINE_ITEMS:
+        c = int(counts.get(item.key, 0))
+        total_minutes += c * item.minutes
+        prelim_with_bbi += c * (item.base_amount + item.bbi_amount)
+        prelim_without_bbi += c * item.base_amount
+
+    loading_625 = 0.0625 * prelim_without_bbi
+    total_billings = prelim_with_bbi + loading_625
+    total_hours = int(math.ceil(total_minutes / 60.0)) if total_minutes > 0 else 0
+
+    return {
+        "total_minutes": int(total_minutes),
+        "total_hours": int(total_hours),
+        "prelim_with_bbi": float(prelim_with_bbi),
+        "prelim_without_bbi": float(prelim_without_bbi),
+        "loading_625": float(loading_625),
+        "total_billings": float(total_billings),
+    }
+
+
+def insert_week(week_ending: str, counts: Dict[str, int]) -> Tuple[bool, str]:
+    # Basic validation
+    try:
+        datetime.strptime(week_ending, "%Y-%m-%d")
+    except ValueError:
+        return False, "Invalid week ending date. Use YYYY-MM-DD."
+
+    totals = compute_totals(counts)
+    created_at = datetime.now().isoformat(timespec="seconds")
+
+    try:
+        with get_conn() as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO weekly_totals
+                (week_ending, total_billings, prelim_with_bbi, prelim_without_bbi,
+                 loading_625, total_minutes, total_hours, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    week_ending,
+                    totals["total_billings"],
+                    totals["prelim_with_bbi"],
+                    totals["prelim_without_bbi"],
+                    totals["loading_625"],
+                    totals["total_minutes"],
+                    totals["total_hours"],
+                    created_at,
+                ),
+            )
+            weekly_total_id = cur.lastrowid
+
+            # Store per-line item snapshot for future budgets/breakdowns
+            for item in LINE_ITEMS:
+                c = int(counts.get(item.key, 0))
+                conn.execute(
+                    """
+                    INSERT INTO weekly_line_items
+                    (weekly_total_id, item_key, item_label, minutes_per_item, base_amount, bbi_amount, count)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        weekly_total_id,
+                        item.key,
+                        item.label,
+                        item.minutes,
+                        item.base_amount,
+                        item.bbi_amount,
+                        c,
+                    ),
+                )
+
+        return True, "Saved."
+    except sqlite3.IntegrityError:
+        return False, "That week ending already exists in the log. Choose a different date or delete the existing entry."
+    except Exception as e:
+        return False, f"Unexpected error saving: {e}"
+
+
+def fetch_weeks() -> List[sqlite3.Row]:
+    with get_conn() as conn:
+        return list(
+            conn.execute(
+                """
+                SELECT *
+                FROM weekly_totals
+                ORDER BY week_ending DESC
+                """
+            )
+        )
+
+
+def fetch_week_detail(week_id: int) -> Tuple[Optional[sqlite3.Row], List[sqlite3.Row]]:
+    with get_conn() as conn:
+        week = conn.execute("SELECT * FROM weekly_totals WHERE id = ?", (week_id,)).fetchone()
+        items = list(
+            conn.execute(
+                """
+                SELECT *
+                FROM weekly_line_items
+                WHERE weekly_total_id = ?
+                ORDER BY item_label ASC
+                """,
+                (week_id,),
+            )
+        )
+        return week, items
+
+
+def delete_week(week_id: int) -> Tuple[bool, str]:
+    try:
+        with get_conn() as conn:
+            cur = conn.execute("DELETE FROM weekly_totals WHERE id = ?", (week_id,))
+            if cur.rowcount == 0:
+                return False, "Week not found."
+        return True,
