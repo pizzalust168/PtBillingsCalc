@@ -135,17 +135,29 @@ export const setBudgetSchema = z.object({
 
 export type SetBudgetInput = z.infer<typeof setBudgetSchema>;
 
+function parseIsoDate(dateStr: string): Date {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function formatIsoDate(date: Date): string {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export function getMonday(dateStr: string): string {
-  const d = new Date(dateStr + "T00:00:00");
-  const day = d.getDay();
+  const d = parseIsoDate(dateStr);
+  const day = d.getUTCDay();
   const diff = day === 0 ? -6 : 1 - day;
   const monday = new Date(d);
-  monday.setDate(d.getDate() + diff);
-  return monday.toISOString().split("T")[0];
+  monday.setUTCDate(d.getUTCDate() + diff);
+  return formatIsoDate(monday);
 }
 
 export function getSunday(mondayStr: string): string {
-  const d = new Date(mondayStr + "T00:00:00");
-  d.setDate(d.getDate() + 6);
-  return d.toISOString().split("T")[0];
+  const d = parseIsoDate(mondayStr);
+  d.setUTCDate(d.getUTCDate() + 6);
+  return formatIsoDate(d);
 }

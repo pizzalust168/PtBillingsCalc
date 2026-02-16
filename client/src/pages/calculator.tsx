@@ -19,7 +19,9 @@ export default function CalculatorPage() {
     return initial;
   });
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Australia/Sydney",
+  }).format(new Date());
   const [date, setDate] = useState(today);
 
   const totals = useMemo(() => calculateTotals(counts), [counts]);
