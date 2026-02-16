@@ -115,6 +115,26 @@ export function computeTotals(counts: Record<string, number>) {
   };
 }
 
+export const monthlyBudgets = pgTable("monthly_budgets", {
+  id: serial("id").primaryKey(),
+  month: text("month").notNull().unique(),
+  budget: real("budget").notNull(),
+});
+
+export const insertMonthlyBudgetSchema = createInsertSchema(monthlyBudgets).omit({
+  id: true,
+});
+
+export type MonthlyBudget = typeof monthlyBudgets.$inferSelect;
+export type InsertMonthlyBudget = z.infer<typeof insertMonthlyBudgetSchema>;
+
+export const setBudgetSchema = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/, "Month must be YYYY-MM format"),
+  budget: z.number().min(0, "Budget must be a positive number"),
+});
+
+export type SetBudgetInput = z.infer<typeof setBudgetSchema>;
+
 export function getMonday(dateStr: string): string {
   const d = new Date(dateStr + "T00:00:00");
   const day = d.getDay();

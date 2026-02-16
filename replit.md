@@ -4,9 +4,10 @@
 
 A medical billings calculator web application that allows healthcare professionals to track daily billing items with live totals, persistent logging, and detailed breakdowns. The app replicates Excel-based billing logic in a web interface, supporting line-item counts for various medical consultation types, automatic calculation of totals (including BBI amounts, loading, and total billings), and a persistent log of daily entries grouped by work week (Monday–Sunday).
 
-The app has two main pages:
+The app has three main pages:
 - **Calculator** (`/`) — Enter counts for billing line items, see live-calculated totals, and save daily entries
 - **Billings Log** (`/log`) — View daily entries automatically grouped by work week (Mon–Sun), inspect day details, export CSV, and delete entries
+- **Dashboard** (`/dashboard`) — Monthly summaries with month-to-date totals, daily averages, budget setting/editing, and budget vs actual comparison with progress bar
 
 ## User Preferences
 
@@ -33,6 +34,8 @@ Preferred communication style: Simple, everyday language.
   - `GET /api/days/export/all` — Export all days as CSV
   - `POST /api/days` — Save a new day (validates with Zod, prevents duplicate dates)
   - `DELETE /api/days/:id` — Delete a day and its line items
+  - `GET /api/budgets` — List all monthly budgets
+  - `PUT /api/budgets` — Set or update a monthly budget
 - **Development**: Vite dev server middleware with HMR served through Express
 - **Production**: Static files served from `dist/public`, built via custom build script using esbuild (server) + Vite (client)
 
@@ -49,8 +52,10 @@ Preferred communication style: Simple, everyday language.
 - **Tables**:
   - `daily_totals` — Stores computed totals per day (date is unique)
   - `daily_line_items` — Stores per-item counts for each day (foreign key to daily_totals with cascade delete, unique on dailyTotalId + itemKey)
+  - `monthly_budgets` — Stores target budget per month (month in YYYY-MM format, unique)
 - **Relations**: One-to-many from daily_totals to daily_line_items
 - **Work Week Grouping**: Days are grouped into work weeks (Mon–Sun) on the frontend
+- **Monthly Grouping**: Days are grouped by calendar month on the Dashboard for summaries and budget tracking
 - **Session Storage**: connect-pg-simple available for session storage (dependency present)
 
 ### Storage Layer

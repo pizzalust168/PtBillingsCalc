@@ -1,5 +1,5 @@
 import { useLocation, Link } from "wouter";
-import { Calculator, ClipboardList } from "lucide-react";
+import { Calculator, ClipboardList, LayoutDashboard } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -15,6 +15,7 @@ import {
 const navItems = [
   { title: "Calculator", href: "/", icon: Calculator },
   { title: "Billings Log", href: "/log", icon: ClipboardList },
+  { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
 ];
 
 export function AppSidebar() {

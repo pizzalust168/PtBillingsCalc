@@ -10,12 +10,14 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import NotFound from "@/pages/not-found";
 import CalculatorPage from "@/pages/calculator";
 import LogPage from "@/pages/log";
+import DashboardPage from "@/pages/dashboard";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={CalculatorPage} />
       <Route path="/log" component={LogPage} />
+      <Route path="/dashboard" component={DashboardPage} />
       <Route component={NotFound} />
     </Switch>
   );

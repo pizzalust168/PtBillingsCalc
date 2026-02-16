@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { LINE_ITEMS, computeTotals, saveDaySchema, getMonday, getSunday } from "@shared/schema";
+import { LINE_ITEMS, computeTotals, saveDaySchema, setBudgetSchema, getMonday, getSunday } from "@shared/schema";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -190,6 +190,28 @@ export async function registerRoutes(
       res.json({ message: "Day deleted" });
     } catch (error) {
       res.status(500).json({ message: "Failed to delete day" });
+    }
+  });
+
+  app.get("/api/budgets", async (_req, res) => {
+    try {
+      const budgets = await storage.getBudgets();
+      res.json(budgets);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch budgets" });
+    }
+  });
+
+  app.put("/api/budgets", async (req, res) => {
+    try {
+      const parsed = setBudgetSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
+      }
+      const budget = await storage.setBudget(parsed.data);
+      res.json(budget);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to set budget" });
     }
   });
 

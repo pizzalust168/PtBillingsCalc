@@ -1,10 +1,13 @@
 import {
   dailyTotals,
   dailyLineItems,
+  monthlyBudgets,
   type DailyTotal,
   type InsertDailyTotal,
   type DailyLineItem,
   type InsertDailyLineItem,
+  type MonthlyBudget,
+  type InsertMonthlyBudget,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc } from "drizzle-orm";
@@ -17,6 +20,9 @@ export interface IStorage {
   deleteDay(id: number): Promise<boolean>;
   createLineItems(items: InsertDailyLineItem[]): Promise<DailyLineItem[]>;
   getLineItems(dailyTotalId: number): Promise<DailyLineItem[]>;
+  getBudgets(): Promise<MonthlyBudget[]>;
+  getBudget(month: string): Promise<MonthlyBudget | undefined>;
+  setBudget(budget: InsertMonthlyBudget): Promise<MonthlyBudget>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -55,6 +61,29 @@ export class DatabaseStorage implements IStorage {
       .from(dailyLineItems)
       .where(eq(dailyLineItems.dailyTotalId, dailyTotalId))
       .orderBy(dailyLineItems.itemLabel);
+  }
+
+  async getBudgets(): Promise<MonthlyBudget[]> {
+    return db.select().from(monthlyBudgets).orderBy(desc(monthlyBudgets.month));
+  }
+
+  async getBudget(month: string): Promise<MonthlyBudget | undefined> {
+    const [budget] = await db.select().from(monthlyBudgets).where(eq(monthlyBudgets.month, month));
+    return budget || undefined;
+  }
+
+  async setBudget(budget: InsertMonthlyBudget): Promise<MonthlyBudget> {
+    const existing = await this.getBudget(budget.month);
+    if (existing) {
+      const [updated] = await db
+        .update(monthlyBudgets)
+        .set({ budget: budget.budget })
+        .where(eq(monthlyBudgets.month, budget.month))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(monthlyBudgets).values(budget).returning();
+    return created;
   }
 }
 
